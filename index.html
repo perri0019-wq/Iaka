@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>BOOM + DICE</title>
+
+<style>
+*{box-sizing:border-box;font-family:Arial,sans-serif;font-weight:bold}
+
+/* ===== BACKGROUND ===== */
+body{
+  margin:0;
+  font-size:22px;
+  color:#eaf6ff;
+  background:
+    radial-gradient(120% 100% at 50% 0%,
+      #1a2f6b 0%,
+      #0a1028 60%,
+      #060914 100%);
+}
+
+/* ===== HEADER ===== */
+.header{
+  display:flex;
+  align-items:center;
+  padding:20px;
+  background:linear-gradient(180deg,#1b2f6a,#101b3a);
+  box-shadow:0 12px 40px rgba(0,0,0,.6);
+}
+
+.avatar{
+  width:80px;
+  height:80px;
+  border-radius:50%;
+  background:rgba(255,255,255,.12);
+}
+
+.menu-back{
+  display:none;
+  margin-left:20px;
+  padding:26px 48px;
+  border-radius:32px;
+  cursor:pointer;
+  font-size:26px;
+  background:linear-gradient(180deg,#2a3f7f,#1a2550);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15),
+             0 10px 30px rgba(0,0,0,.6);
+}
+
+.balance{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  padding:26px 40px;
+  border-radius:36px;
+  font-size:38px;
+  background:linear-gradient(180deg,#2d8cff,#1f6fff);
+  box-shadow:0 8px 30px rgba(45,140,255,.6);
+  color:#fff;
+}
+
+.coin-icon{
+  width:60px;
+  height:60px;
+  margin-right:14px;
+}
+
+/* ===== MENU ===== */
+.menu{
+  padding:28px;
+}
+
+.bomb-btn{
+  width:100%;
+  height:25vh;
+  margin-bottom:20px;
+  position:relative;
+  border-radius:36px;
+  cursor:pointer;
+  background:linear-gradient(180deg,#1c2d66,#141d44);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.15),
+    0 20px 50px rgba(0,0,0,.7);
+  border:none;
+}
+
+.bomb-btn span{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  font-size:96px;
+  color:#fff;
+}
+
+/* ===== GAME ===== */
+.game{
+  display:none;
+  padding:26px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== HEADER ===== -->
+<div class="header">
+  <div class="avatar"></div>
+  <div class="menu-back" id="menuBack" onclick="backToMenu()">в меню 🎰</div>
+  <div class="balance">
+    <img src="coin.png" class="coin-icon">
+    <span id="balance">1000.00</span>
+  </div>
+</div>
+
+<!-- ===== MENU ===== -->
+<div class="menu" id="menu">
+  <button class="bomb-btn" onclick="enterBoom()">
+    <span>BOOM</span>
+  </button>
+
+  <!-- КНОПКА DICE (ЕДИНСТВЕННОЕ ДОБАВЛЕНИЕ В МЕНЮ) -->
+  <button class="bomb-btn" onclick="enterDice()">
+    <span>DICE</span>
+  </button>
+</div>
+<!-- ===================== BOOM GAME ===================== -->
+<div class="game" id="boomGame">
+
+  <div class="win-info">
+    Возможный выигрыш<br>
+    <span id="possibleWin">0.00</span><br>
+    x<span id="multiplier">1.00</span>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+  <div class="controls">
+    <input id="bet" value="1">
+    <input id="bombSlider" type="range" min="2" max="10" value="3">
+    <button id="playBtn" onclick="play()">Играть</button>
+    <button id="cashoutBtn" onclick="cashOut()" style="display:none">Забрать</button>
+  </div>
+
+</div>
+
+<script>
+/* ===================== ОБЩИЙ БАЛАНС ===================== */
+let balance = Number(localStorage.getItem('balance')) || 1000;
+const balanceEl = document.getElementById('balance');
+balanceEl.innerText = balance.toFixed(2);
+
+/* ===================== НАВИГАЦИЯ ===================== */
+const menu = document.getElementById('menu');
+const boomGame = document.getElementById('boomGame');
+const diceGame = document.getElementById('diceGame');
+const menuBack = document.getElementById('menuBack');
+
+function enterBoom(){
+  menu.style.display = 'none';
+  diceGame.style.display = 'none';
+  boomGame.style.display = 'block';
+  menuBack.style.display = 'block';
+  buildGrid();
+  validateBet();
+}
+
+function enterDice(){
+  menu.style.display = 'none';
+  boomGame.style.display = 'none';
+  diceGame.style.display = 'block';
+  menuBack.style.display = 'block';
+}
+
+function backToMenu(){
+  menu.style.display = 'block';
+  boomGame.style.display = 'none';
+  diceGame.style.display = 'none';
+  menuBack.style.display = 'none';
+}
+
+/* ===================== BOOM LOGIC (БЕЗ УПРОЩЕНИЙ) ===================== */
+let betValue = 0,
+    playing = false,
+    opened = 0,
+    multiplier = 1;
+
+let bombs = [],
+    bombsCount = 3;
+
+const grid = document.getElementById('grid');
+const betEl = document.getElementById('bet');
+const possibleWin = document.getElementById('possibleWin');
+const multiplierEl = document.getElementById('multiplier');
+const playBtn = document.getElementById('playBtn');
+const cashoutBtn = document.getElementById('cashoutBtn');
+const bombSlider = document.getElementById('bombSlider');
+
+function buildGrid(){
+  grid.innerHTML = '';
+  for(let i=0;i<25;i++){
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.onclick = () => openCell(cell,i);
+    grid.appendChild(cell);
+  }
+}
+
+function validateBet(){
+  betValue = parseFloat(betEl.value) || 0;
+  if(betValue >= 1 && betValue <= balance && !playing){
+    playBtn.classList.remove('disabled');
+  }else{
+    playBtn.classList.add('disabled');
+  }
+}
+
+function play(){
+  if(playBtn.classList.contains('disabled')) return;
+
+  balance -= betValue;
+  balanceEl.innerText = balance.toFixed(2);
+  localStorage.setItem('balance', balance);
+
+  bombs = [];
+  bombsCount = bombSlider.value;
+
+  while(bombs.length < bombsCount){
+    const r = Math.floor(Math.random() * 25);
+    if(!bombs.includes(r)) bombs.push(r);
+  }
+
+  playing = true;
+  opened = 0;
+  multiplier = 1;
+  possibleWin.innerText = '0.00';
+  multiplierEl.innerText = '1.00';
+  cashoutBtn.style.display = 'none';
+}
+
+function openCell(cell, index){
+  if(!playing || cell.classList.contains('safe')) return;
+
+  if(bombs.includes(index)){
+    cell.classList.add('boom');
+    playing = false;
+    validateBet();
+    return;
+  }
+
+  cell.classList.add('safe');
+  opened++;
+  multiplier += 0.25;
+
+  possibleWin.innerText = (betValue * multiplier).toFixed(2);
+  multiplierEl.innerText = multiplier.toFixed(2);
+  cashoutBtn.style.display = 'block';
+}
+
+function cashOut(){
+  balance += betValue * multiplier;
+  balanceEl.innerText = balance.toFixed(2);
+  localStorage.setItem('balance', balance);
+
+  playing = false;
+  cashoutBtn.style.display = 'none';
+  validateBet();
+}
+</script>
+<!-- ===================== DICE CSS (ПОЛНОСТЬЮ ИЗ ТВОЕГО ФАЙЛА) ===================== -->
+<style>
+/* ===== DICE ===== */
+.container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.game {
+  width: 460px;
+  background: linear-gradient(180deg, #121a44, #0b102e);
+  border-radius: 40px;
+  padding: 30px;
+  box-shadow:
+    0 30px 80px rgba(0,0,0,0.6),
+    inset 0 0 0 1px rgba(255,255,255,0.08);
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 24px;
+  font-size: 34px;
+  font-weight: 900;
+}
+
+/* ===== Поля ===== */
+.row { display: flex; gap: 18px; }
+.input-group { flex: 1; }
+
+label {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.input-box {
+  border-radius: 22px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.12),
+    0 0 18px rgba(66,165,245,0.25);
+}
+
+.input-box input {
+  width: 100%;
+  padding: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #fff;
+}
+
+/* ===== Кнопки под полями ===== */
+.input-actions {
+  display: flex;
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+
+.input-actions button {
+  flex: 1;
+  padding: 8px;
+  background: linear-gradient(180deg, #42a5f5, #1e88e5);
+  border: none;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.input-actions button:first-child {
+  border-right: 1px solid rgba(255,255,255,0.25);
+}
+
+/* ===== Возможный выигрыш ===== */
+.payout {
+  margin-top: 20px;
+  padding: 18px;
+  background: rgba(0,0,0,0.35);
+  border-radius: 22px;
+  font-size: 16px;
+}
+
+.payout b {
+  font-size: 22px;
+}
+
+/* ===== Кнопки игры ===== */
+.buttons {
+  display: flex;
+  gap: 20px;
+  margin-top: 26px;
+}
+
+.buttons button {
+  flex: 1;
+  padding: 22px;
+  font-size: 24px;
+  font-weight: 900;
+  border-radius: 36px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(180deg, #42a5f5, #1e88e5);
+  box-shadow:
+    0 0 25px rgba(66,165,245,0.6),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+.buttons button:active {
+  transform: scale(0.95);
+}
+
+.buttons button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===== WIN / LOSE ===== */
+@keyframes glow {
+  from { box-shadow: 0 0 10px rgba(102,187,106,0.6); }
+  to { box-shadow: 0 0 40px rgba(102,187,106,1); }
+}
+
+.win-btn {
+  background: linear-gradient(180deg, #66bb6a, #2e7d32) !important;
+  box-shadow: 0 0 35px rgba(102,187,106,1);
+  animation: glow 0.4s ease-out;
+}
+
+.lose-btn {
+  background: linear-gradient(180deg, #ef5350, #b71c1c) !important;
+  box-shadow: 0 0 35px rgba(239,83,80,1);
+}
+
+/* ===== Результат ===== */
+.result {
+  margin-top: 20px;
+  padding: 18px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 22px;
+  font-size: 16px;
+}
+
+.win { color: #66bb6a; }
+.lose { color: #ef5350; }
+
+/* ===== История ===== */
+.history {
+  margin-top: 20px;
+  padding: 14px;
+  background: rgba(0,0,0,0.35);
+  border-radius: 22px;
+  height: 160px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 14px;
+}
+
+.history div {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+</style>
+
+<!-- ===================== DICE HTML (ВНУТРИ КОНТЕЙНЕРА) ===================== -->
+<div class="game" id="diceGame">
+
+  <div class="container">
+    <div class="game">
+
+      <h1>🎲 DICE</h1>
+
+      <div class="row">
+        <div class="input-group">
+          <label>Ставка</label>
+          <div class="input-box">
+            <input id="bet" value="1">
+            <div class="input-actions">
+              <button onclick="halfBet()">½</button>
+              <button onclick="doubleBet()">x2</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Шанс %</label>
+          <div class="input-box">
+            <input id="chance" value="50">
+            <div class="input-actions">
+              <button onclick="halfChance()">½</button>
+              <button onclick="doubleChance()">x2</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="payout">Возможный выигрыш: <b id="payout">0</b></div>
+
+      <div class="buttons">
+        <button id="lessBtn" onclick="play('less')">МЕНЬШЕ</button>
+        <button id="moreBtn" onclick="play('more')">БОЛЬШЕ</button>
+      </div>
+
+      <div class="result" id="result">Сделай ставку</div>
+      <div class="history" id="history"><b>История ставок</b></div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ===================== DICE JS (БЕЗ ИЗМЕНЕНИЯ СУТИ) ===================== */
+let diceBalanceEl = document.getElementById('balance');
+
+const betInput = document.getElementById('bet');
+const chanceInput = document.getElementById('chance');
+const payoutEl = document.getElementById('payout');
+const resultEl = document.getElementById('result');
+const historyEl = document.getElementById('history');
+const lessBtn = document.getElementById('lessBtn');
+const moreBtn = document.getElementById('moreBtn');
+
+function vibrate(ms){ if(navigator.vibrate) navigator.vibrate(ms); }
+function multiplier(chance){ return (100 / chance) * 0.99; }
+
+function validateBet(){
+  if(!/^\d+(\.\d{1,2})?$/.test(betInput.value)) return false;
+  const v = Number(betInput.value);
+  return v >= 1 && v <= balance;
+}
+
+function validateChance(){
+  if(!/^\d+$/.test(chanceInput.value)) return false;
+  const v = Number(chanceInput.value);
+  return v >= 1 && v <= 95;
+}
+
+function updatePayout(){
+  if(validateBet() && validateChance()){
+    payoutEl.textContent = (betInput.value * multiplier(chanceInput.value)).toFixed(2);
+  } else {
+    payoutEl.textContent = '0';
+  }
+}
+
+betInput.addEventListener('input', updatePayout);
+chanceInput.addEventListener('input', updatePayout);
+
+function halfBet(){
+  if(validateBet()){
+    betInput.value = (betInput.value / 2).toFixed(2);
+    updatePayout();
+  }
+}
+function doubleBet(){
+  if(validateBet()){
+    betInput.value = Math.min(balance, betInput.value * 2).toFixed(2);
+    updatePayout();
+  }
+}
+function halfChance(){
+  chanceInput.value = Math.max(1, Math.floor(chanceInput.value / 2));
+  updatePayout();
+}
+function doubleChance(){
+  chanceInput.value = Math.min(95, chanceInput.value * 2);
+  updatePayout();
+}
+
+function resetButtons(){
+  lessBtn.classList.remove('win-btn','lose-btn');
+  moreBtn.classList.remove('win-btn','lose-btn');
+}
+
+function play(type){
+  resetButtons();
+  vibrate(30);
+
+  if(!validateBet()){
+    resultEl.innerHTML = '<span class="lose">неправильно указана ставка</span>';
+    return;
+  }
+  if(!validateChance()){
+    resultEl.innerHTML = '<span class="lose">неправильно указан шанс</span>';
+    return;
+  }
+
+  const bet = Number(betInput.value);
+  const chance = Number(chanceInput.value);
+
+  resultEl.textContent = '🎲 Бросаем кости...';
+  lessBtn.disabled = moreBtn.disabled = true;
+
+  setTimeout(()=>{
+    balance -= bet;
+    const roll = Math.random() * 100;
+    const win = type==='less' ? roll < chance : roll > (100 - chance);
+    const btn = type==='less' ? lessBtn : moreBtn;
+
+    if(win){
+      balance += bet * multiplier(chance);
+      btn.classList.add('win-btn');
+      vibrate([40,60,40]);
+    } else {
+      btn.classList.add('lose-btn');
+      vibrate(200);
+    }
+
+    diceBalanceEl.textContent = balance.toFixed(2);
+    localStorage.setItem('balance', balance);
+
+    resultEl.innerHTML = `Выпало <b>${roll.toFixed(2)}</b><br>
+      <span class="${win?'win':'lose'}">${win?'Победа':'Проигрыш'}</span>`;
+
+    historyEl.innerHTML +=
+      `<div class="${win?'win':'lose'}">${type.toUpperCase()} | ${bet} | ${roll.toFixed(2)}</div>`;
+
+    lessBtn.disabled = moreBtn.disabled = false;
+  }, 400);
+}
+
+diceBalanceEl.textContent = balance.toFixed(2);
+updatePayout();
+</script>
+
+</body>
+</html>
